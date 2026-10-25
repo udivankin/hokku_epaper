@@ -58,6 +58,17 @@ def _face_centered_crop_offset(
     return x_off, y_off
 
 
+def visible_rotated_from_panel(panel_rotated: bool, orientation: Orientation) -> bool:
+    """True when the visible image is turned 90° relative to panel memory.
+
+    That is a portrait-memory panel mounted landscape (Huessen, landscape) or a
+    landscape-memory panel mounted portrait (Bigme F7, portrait). The visible
+    canvas is then the panel canvas with width and height swapped, and the
+    render is rotated -90° into panel memory.
+    """
+    return panel_rotated != (orientation == "portrait")
+
+
 def transform_bboxes_to_canvas_norm(
     bboxes_norm: tuple[BoundingBox, ...] | None,
     orig_w: int,
@@ -87,9 +98,8 @@ def transform_bboxes_to_canvas_norm(
     if not bboxes_norm:
         return []
 
-    portrait = orientation == "portrait"
-    if panel_rotated:
-        visible_w, visible_h = (canvas_w, canvas_h) if portrait else (canvas_h, canvas_w)
+    if visible_rotated_from_panel(panel_rotated, orientation):
+        visible_w, visible_h = canvas_h, canvas_w
     else:
         visible_w, visible_h = canvas_w, canvas_h
 
@@ -255,7 +265,7 @@ class AbstractImageRenderer(ABC):
     ) -> bytes:
         """Panel-memory RGB → PNG bytes in the visible (browser) orientation."""
         img = Image.fromarray(np.asarray(panel_rgb, dtype=np.uint8))
-        if panel_rotated and orientation == "landscape":
+        if visible_rotated_from_panel(panel_rotated, orientation):
             img = img.rotate(90, expand=True)
         buf = BytesIO()
         img.save(buf, format="PNG")
@@ -290,9 +300,9 @@ class AbstractImageRenderer(ABC):
         center the cover-crop window on instead of the image center — "face-aware
         cropping". Only affects the ``use_cover`` branch; ignored while letterboxing.
         """
-        portrait = orientation == "portrait"
-        if self._display.panel_rotated:
-            visible_w, visible_h = (canvas_w, canvas_h) if portrait else (canvas_h, canvas_w)
+        rotated = visible_rotated_from_panel(self._display.panel_rotated, orientation)
+        if rotated:
+            visible_w, visible_h = canvas_h, canvas_w
         else:
             visible_w, visible_h = canvas_w, canvas_h
 
@@ -368,7 +378,7 @@ class AbstractImageRenderer(ABC):
 
         composed = _apply_prepare_enhancements(composed, cfg, keepout_canvas or None)
 
-        if self._display.panel_rotated and not portrait:
+        if rotated:
             composed = composed.rotate(-90, expand=True)
             padding_mask = np.rot90(padding_mask, k=3)
 

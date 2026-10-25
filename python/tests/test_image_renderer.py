@@ -97,6 +97,39 @@ def test_render_indices_valid_palette_values(dither) -> None:
     assert int(idx.max()) < n_palette
 
 
+_F7 = DISPLAY_REGISTRY["bigme_f7"]
+
+
+def _red_over_blue(w: int, h: int) -> Image.Image:
+    arr = np.zeros((h, w, 3), dtype=np.uint8)
+    arr[: h // 2] = (255, 0, 0)
+    arr[h // 2 :] = (0, 0, 255)
+    return Image.fromarray(arr, mode="RGB")
+
+
+def test_landscape_panel_mounted_portrait_rotates_into_memory() -> None:
+    """A natively landscape panel (F7, panel_rotated=False) set to portrait must
+    compose at the swapped (portrait) size and turn it into landscape memory.
+    Regression: the portrait setting was ignored, so a portrait photo was laid
+    out on the landscape canvas and showed up sideways on a portrait-mounted F7."""
+    r = ImageRenderer(NumbaStreamingDither(_F7), _F7)
+    # Panel memory 80×48 (landscape); a 48×80 source fills the portrait view exactly.
+    idx = r.render_indices(_red_over_blue(48, 80), _noop_cfg(), Orientation.PORTRAIT, 80, 48)
+    assert idx.shape == (48, 80)
+    # -90° into memory: the visible top (red) lands on the right, bottom (blue) on the left.
+    right, left = idx[:, 60:], idx[:, :20]
+    assert np.all(right == right[0, 0]) and np.all(left == left[0, 0])
+    assert right[0, 0] != left[0, 0]
+
+
+def test_landscape_panel_mounted_landscape_is_not_rotated() -> None:
+    r = ImageRenderer(NumbaStreamingDither(_F7), _F7)
+    idx = r.render_indices(_red_over_blue(80, 48), _noop_cfg(), Orientation.LANDSCAPE, 80, 48)
+    top, bottom = idx[:20, :], idx[-20:, :]
+    assert np.all(top == top[0, 0]) and np.all(bottom == bottom[0, 0])
+    assert top[0, 0] != bottom[0, 0]
+
+
 # ── render_panel_bytes / render_preview_png ───────────────────────────────────
 
 

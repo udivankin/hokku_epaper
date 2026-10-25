@@ -44,8 +44,10 @@ class Display(ABC):
     landscape, so a landscape render is composed at 1600×1200 then rotated
     -90° into panel memory (``panel_rotated=True``).  The Bigme F7 panel
     memory is natively landscape (800×480 == visible), so no rotation is
-    applied (``panel_rotated=False``).  The render pipeline gates its
-    rotate/dimension-swap on this flag.
+    applied (``panel_rotated=False``).  The render pipeline rotates and swaps
+    dimensions whenever this flag disagrees with the screen's orientation
+    (``image_abc.visible_rotated_from_panel``): Huessen in landscape, or the
+    F7 mounted portrait.
     """
 
     palette_measured_rgb: NDArray
