@@ -1,3 +1,10 @@
+hokku-server (4.0.1~dev.101-1) unstable; urgency=medium
+
+  * New tools/hokku_telegram_bot.py: a stdlib-only Telegram bot that adds
+    photos sent to it to the library and queues them as the next image.
+
+ -- udi <udi@mayflower.work>  Sun, 25 Oct 2026 14:52:22 +0200
+
 hokku-server (4.0.1~dev.100-1) unstable; urgency=medium
 
   * Firmware parity: every model shows the same error messages, confirms or
