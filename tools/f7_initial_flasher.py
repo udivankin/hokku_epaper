@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Initial USB flash of a fresh/stock Bigme F7 to Hokku firmware.
 
-A stock unit can't answer `upgrade` (that's our firmware's command), so entry is via
-the XR872 mask-BROM. The catch works IN PURE PYTHON if triggered correctly: hammer
+A stock unit may answer `upgrade -h` on its console and drop into the BROM; if you did
+that first, the catch below lands on its first sync. Otherwise the XR872 mask-BROM
+has to be caught by hand. The catch works IN PURE PYTHON if triggered correctly: hammer
 0x55 on an already-open CH340 port while the user does a **USB replug + power press**
 (the replug brings the port up first — no re-enumeration gap; a plain long-press
 drops the port and misses the window). No vendor tool needed.
@@ -98,7 +99,11 @@ def _catch_python(image: pathlib.Path, port: str) -> int:
                 last = time.monotonic()
             continue
         try:
-            if hammer_sync(ser, duration=2.0):
+            try:
+                caught = hammer_sync(ser, duration=2.0)
+            except (serial.SerialException, OSError):
+                caught = False  # port yanked mid-hammer (the replug) — retry
+            if caught:
                 print("\n  *** BROM SYNC CAUGHT — flashing ***")
                 f = XR872Flasher(ser=ser, verbose=False)
                 if not f.sync(attempts=30, timeout_per=0.1):

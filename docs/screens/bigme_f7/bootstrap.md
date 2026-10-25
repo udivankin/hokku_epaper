@@ -10,9 +10,13 @@ It is a **fully pure-Python** procedure — no vendor tool required — driven b
 
 ## Why USB (and the entry trick)
 
-- A stock unit runs OEM firmware, which does **not** answer the `upgrade` console
-  command — so there's no software path into the mask-BROM. The only entry is the
-  **`0x55` catch during a power-cycle**.
+- A stock unit runs OEM firmware, which was long believed not to answer the
+  `upgrade` console command, leaving the **`0x55` catch during a power-cycle** as the
+  only entry. **Try `upgrade -h` on the console first:** on at least one stock unit it
+  dropped straight into the mask-BROM, after which `tools/f7_initial_flasher.py` caught
+  the BROM on its first sync with no replug or button press
+  ([`hardware_facts.md`](hardware_facts.md#brom--recovery)). If it answers
+  `400 Unknown command` instead, fall back to the catch below.
 - The catch is timing-critical: the mask-BROM opens a short UART sync window right
   after power-on. The trick that makes it reliable is the **trigger**:
   - **Correct: USB replug + power press.** Unplug the cable, replug it, *then* press

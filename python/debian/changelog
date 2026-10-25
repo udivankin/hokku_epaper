@@ -1,3 +1,11 @@
+hokku-server (4.0.1~dev.101-1) unstable; urgency=medium
+
+  * Bigme F7: the initial USB flasher no longer crashes on macOS when the USB
+    cable is unplugged mid-catch, and the docs now record that a stock unit
+    can enter the mask-BROM via `upgrade -h` on its console.
+
+ -- udi <udi@mayflower.work>  Sun, 25 Oct 2026 14:31:32 +0200
+
 hokku-server (4.0.1~dev.100-1) unstable; urgency=medium
 
   * Firmware parity: every model shows the same error messages, confirms or

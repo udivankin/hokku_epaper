@@ -104,7 +104,8 @@ The version is reported in `X-Firmware-Version` and the frame-state `fw`.
   hibernation, so the console stays up between `frame` uploads. Not persisted, and
   inert off USB.
 - `upgrade` — SDK command that drops to the mask-BROM (used by the flashers).
-  **Only our firmware answers `upgrade`; stock OEM does not.**
+  Our firmware always answers it. Stock OEM was believed not to, but one stock unit
+  entered the BROM on `upgrade -h` (see [`hardware_facts.md`](hardware_facts.md#brom--recovery)).
 
 ## Build & flash
 

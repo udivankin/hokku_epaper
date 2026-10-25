@@ -20,8 +20,9 @@ bootloader is provably untouched and there is **no brick window**.
 ## Prerequisites
 
 - The unit must be running **our custom firmware** (it enters the mask-BROM via the
-  `upgrade` command; **stock OEM does not answer `upgrade`**, so a unit already on
-  stock can only be re-flashed via the replug+press `0x55` catch or PhoenixMC).
+  `upgrade` command). A unit already on stock may also take `upgrade -h` (see
+  [`hardware_facts.md`](hardware_facts.md#brom--recovery)); otherwise it can only be
+  re-flashed via the replug+press `0x55` catch or PhoenixMC.
 - The unit's **own** OEM dump, 4 MB. Use the unit's *own* dump — the serial lives
   in flash, so flashing another unit's dump changes the reported serial (the
   MAC/cloud-ID is in efuse and is preserved).

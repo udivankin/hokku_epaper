@@ -86,6 +86,12 @@ Source: direct testing on the device, 2026-06-13.
 - **Only software BROM trigger is the firmware console `upgrade` command** (`cmd_upgrade_exec`
   → sets `PRCM CPUA_BOOT_FLAG = SYS_UPDATE` → watchdog reboot → bootloader enters `bl_upgrade`
   and waits in BROM). If running firmware crashes before its console starts, this path is gone.
+- **Stock OEM firmware CAN take the software BROM entry — at least on some units.** Confirmed
+  2026-10-25 on a stock unit that had never run our firmware: its console answered `help`, `?`,
+  `sys` and `cfg show` with `<ACK> 400 Unknown command`, but `upgrade -h` produced a truncated
+  reply and the chip reset into the mask-BROM (a `0x55` hammer got `OK` straight away, and the
+  normal `flash_slot` bootstrap then ran from it with no replug or button press). Plain `upgrade`
+  (no argument) was not tried on that unit, and other OEM firmware builds may differ.
 - **DTR and RTS are NOT wired** to the XR872 reset or power-enable: pulsing either line (both
   polarities) with a 9 s listen produces no boot/crash output. PhoenixMC's DTR-reset is a no-op
   on this board.
