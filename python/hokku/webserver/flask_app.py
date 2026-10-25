@@ -391,7 +391,13 @@ def create_app(
             logger.debug("%s: %s told to retry in %ss", label, screen_name, sleep_seconds)
             return _add_screen_headers(resp)
 
-        binary = manager.panel_bytes_for_model_orientation(chosen, screen_model, cfg.orientation)
+        serve_orientation = cfg.orientation
+        if cfg.follow_image_orientation:
+            rec = manager.status(chosen)
+            native = rec.native_orientation if rec is not None else Orientation.NEUTRAL
+            if native != Orientation.NEUTRAL:
+                serve_orientation = native
+        binary = manager.panel_bytes_for_model_orientation(chosen, screen_model, serve_orientation)
         if binary is None:
             # Cache missing (not yet rendered for this orientation) — tell screen to retry.
             sleep_seconds = _busy_retry_seconds(config)
@@ -923,6 +929,15 @@ def create_app(
                 return jsonify({"error": "filter_by_orientation must be a boolean"}), 400
             updates["filter_by_orientation"] = val
 
+        if "follow_image_orientation" in body:
+            val = body.get("follow_image_orientation")
+            if not isinstance(val, bool):
+                logger.info(
+                    "Screen config %r: follow_image_orientation must be bool, got %r", name, val
+                )
+                return jsonify({"error": "follow_image_orientation must be a boolean"}), 400
+            updates["follow_image_orientation"] = val
+
         if "server_url_override" in body:
             val = body.get("server_url_override")
             if not isinstance(val, str):
@@ -1219,6 +1234,7 @@ def create_app(
                 "state": t.frame_state,
                 "orientation": scfg.orientation,
                 "filter_by_orientation": scfg.filter_by_orientation,
+                "follow_image_orientation": scfg.follow_image_orientation,
                 "server_url_override": scfg.server_url_override,
                 "labels": list(scfg.labels),
                 # True when the label filter leaves this screen nothing to show,

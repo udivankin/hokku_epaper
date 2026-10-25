@@ -114,3 +114,9 @@ def test_screen_config_labels_round_trip():
 def test_screen_config_corrupt_labels_fall_back_to_whole_library():
     cfg = ScreenConfig.from_dict({"orientation": "landscape", "labels": [1, 2]})
     assert cfg.labels == ()
+
+
+def test_screen_config_follow_image_orientation_round_trip():
+    assert ScreenConfig.from_dict({"orientation": "portrait"}).follow_image_orientation is False
+    cfg = ScreenConfig(orientation=Orientation.PORTRAIT, follow_image_orientation=True)
+    assert ScreenConfig.from_dict(cfg.to_dict()).follow_image_orientation is True

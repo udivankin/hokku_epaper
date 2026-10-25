@@ -1178,3 +1178,46 @@ def test_status_flags_a_label_filter_that_matches_nothing(synced_client):
     assert flagged() is True
     client.patch("/hokku/api/labels", json={"names": [name], "add": ["winter"]})
     assert flagged() is False
+
+
+# ── follow_image_orientation ──────────────────────────────────────────────────
+
+
+def _served_orientations(state, monkeypatch) -> list[str]:
+    """Record the orientation each screen fetch asks the render cache for."""
+    seen: list[str] = []
+    real = state.manager.panel_bytes_for_model_orientation
+
+    def spy(name, model, orientation):
+        seen.append(orientation)
+        return real(name, model, orientation)
+
+    monkeypatch.setattr(state.manager, "panel_bytes_for_model_orientation", spy)
+    return seen
+
+
+@pytest.mark.parametrize(("follow", "expected"), [(False, "portrait"), (True, "landscape")])
+def test_follow_image_orientation_serves_the_photo_orientation(
+    synced_client, monkeypatch, follow, expected
+):
+    """A portrait-set screen normally gets every image rendered portrait; with
+    follow_image_orientation it gets a landscape photo rendered landscape."""
+    client, state, _ = synced_client  # the one image is 1200x300: landscape
+    _check_in(client, "frame-1", None)
+    r = client.patch(
+        "/hokku/api/screens/frame-1/config",
+        json={"orientation": "portrait", "follow_image_orientation": follow},
+    )
+    assert r.status_code == 200
+    seen = _served_orientations(state, monkeypatch)
+    assert _check_in(client, "frame-1", None).status_code == 200
+    assert seen == [expected]
+    status = client.get("/hokku/api/status").get_json()
+    assert status["screens"]["frame-1"]["follow_image_orientation"] is follow
+
+
+def test_follow_image_orientation_must_be_bool(bare_client):
+    client, _ = bare_client
+    _check_in(client, "frame-1", None)
+    r = client.patch("/hokku/api/screens/frame-1/config", json={"follow_image_orientation": 1})
+    assert r.status_code == 400

@@ -3,6 +3,8 @@ hokku-server (4.0.1~dev.101-1) unstable; urgency=medium
   * Portrait now works on natively landscape panels (Bigme F7): the render is
     composed at the portrait size and turned into panel memory, instead of
     the portrait setting being ignored and the photo shown sideways.
+  * New per-screen option follow_image_orientation: each image is served in
+    its own orientation, so a landscape photo fills the panel in landscape.
 
  -- udi <udi@mayflower.work>  Sun, 25 Oct 2026 15:03:11 +0200
 

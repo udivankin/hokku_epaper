@@ -24,12 +24,18 @@ class ScreenConfig:
     ``labels``: when non-empty, only images carrying at least one of these
     labels are eligible. Empty (the default, and what every pre-existing
     screen loads as) means no label filter — the whole library.
+
+    ``follow_image_orientation``: when True, each image is served rendered in
+    its own native orientation (a landscape photo fills the panel in landscape,
+    a portrait one in portrait) instead of the screen's ``orientation``, which
+    then only applies to square images. For a frame you turn to suit the photo.
     """
 
     orientation: Orientation = Orientation.LANDSCAPE
     filter_by_orientation: bool = False
     server_url_override: str = ""
     labels: tuple[str, ...] = ()
+    follow_image_orientation: bool = False
 
     def __post_init__(self) -> None:
         assert self.orientation in (Orientation.LANDSCAPE, Orientation.PORTRAIT), (
@@ -42,6 +48,7 @@ class ScreenConfig:
             "filter_by_orientation": self.filter_by_orientation,
             "server_url_override": self.server_url_override,
             "labels": list(self.labels),
+            "follow_image_orientation": self.follow_image_orientation,
         }
 
     @classmethod
@@ -51,6 +58,7 @@ class ScreenConfig:
             filter_by_orientation=bool(d.get("filter_by_orientation", False)),
             server_url_override=str(d.get("server_url_override", "")),
             labels=cls._labels_from_dict(d),
+            follow_image_orientation=bool(d.get("follow_image_orientation", False)),
         )
 
     @staticmethod
