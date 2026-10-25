@@ -2,9 +2,10 @@
 """Telegram bot that adds photos sent to it to a Hokku server's library.
 
 Send the bot a photo (or an image file, which keeps the full resolution) and it
-uploads it to Hokku, waits for the conversion, and queues it as the next image
-for every screen. Screens pick it up at their next scheduled refresh; a sleeping
-frame cannot be woken from the server.
+uploads it to Hokku cropped to fill the panel (no letterbox bars), waits for the
+conversion, and queues it as the next image for every screen. Screens pick it
+up at their next scheduled refresh; a sleeping frame cannot be woken from the
+server.
 
 Standard library only, so it runs on any Hokku host without a venv. Run it next
 to the server and point it at the local port, which needs no auth:
@@ -37,6 +38,9 @@ log = logging.getLogger("hokku_telegram_bot")
 
 POLL_TIMEOUT_S = 50  # Telegram long-poll; the HTTP timeout is set a bit above it
 CONVERT_TIMEOUT_S = 180
+# Per-photo crop-to-fill override: the largest allowed zoom, so every photo is
+# cropped to fill the panel instead of letterboxed (phone photos need ~0.25).
+CROP_TO_FILL = 1.0
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".gif", ".bmp", ".tif", ".tiff"}
 
 HELP = (
@@ -134,6 +138,14 @@ class Hokku:
             time.sleep(2)
         raise RuntimeError(f"conversion still running after {CONVERT_TIMEOUT_S} s")
 
+    def set_crop_to_fill(self, name: str, threshold: float) -> None:
+        self._json(
+            "PATCH",
+            "/hokku/api/image/" + urllib.parse.quote(name) + "/config",
+            data=json.dumps({"crop_to_fill_threshold": threshold}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+
     def show_next(self, name: str) -> None:
         self._json("POST", "/hokku/api/show_next/" + urllib.parse.quote(name))
 
@@ -190,6 +202,7 @@ def handle(tg: Telegram, hokku: Hokku, allowed: set[int], msg: dict) -> None:
         data, _ = tg.download(file_id)
         log.info("user %s sent %s (%d bytes)", uid, name, len(data))
         hokku.upload(name, data)
+        hokku.set_crop_to_fill(name, CROP_TO_FILL)
         hokku.wait_converted(name)
         hokku.show_next(name)
     except Exception as e:  # report any failure back to the sender
