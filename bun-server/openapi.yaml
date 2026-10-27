@@ -1,11 +1,14 @@
 openapi: 3.1.0
 info:
   title: Hokku photo upload
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Send a photo to the Bigme F7 frame over HTTP, the same as sending it to the
     Telegram bot. The photo is cropped and dithered for the panel straight away
     and replaces what the frame shows at its next scheduled refresh.
+
+    With `mode=raw` the image is taken as already drawn in the panel's six inks
+    (see PREDITHERED.md) and shown as-is, like an image sent to the bot as a file.
 servers:
   - url: /
     description: The server this schema was fetched from
@@ -18,6 +21,12 @@ paths:
       operationId: uploadPhoto
       summary: Upload a photo for the frame
       parameters:
+        - name: mode
+          in: query
+          required: false
+          description: How to render the image. Overridden by the multipart `mode` field.
+          schema:
+            $ref: "#/components/schemas/Mode"
         - name: X-From
           in: header
           required: false
@@ -51,6 +60,8 @@ paths:
                   type: string
                   maxLength: 64
                   description: Who sent the photo.
+                mode:
+                  $ref: "#/components/schemas/Mode"
             encoding:
               file:
                 contentType: image/*
@@ -66,6 +77,10 @@ paths:
               description: "Only with `Accept: image/png`."
               schema:
                 $ref: "#/components/schemas/Orientation"
+            X-Mode:
+              description: "Only with `Accept: image/png`."
+              schema:
+                $ref: "#/components/schemas/Mode"
             X-Next-Refresh:
               description: "Only with `Accept: image/png`."
               schema:
@@ -110,18 +125,29 @@ components:
       scheme: bearer
       description: The server's `UPLOAD_TOKEN` as a bearer token.
   schemas:
+    Mode:
+      type: string
+      enum: [photo, raw]
+      default: photo
+      description: |
+        `photo` crops, tunes and dithers a photograph for the panel. `raw` takes an
+        image already drawn in the six inks: at 800×480 or 480×800 each pixel maps
+        straight to its ink; other sizes are cover-cropped, resized and snapped to
+        the inks without any tonal processing.
     Orientation:
       type: string
       enum: [landscape, portrait]
       description: Taken from the photo's own shape; square photos use the server's `SQUARE_ORIENTATION`.
     UploadResult:
       type: object
-      required: [ok, orientation, received_at, next_refresh, preview]
+      required: [ok, orientation, mode, received_at, next_refresh, preview]
       properties:
         ok:
           const: true
         orientation:
           $ref: "#/components/schemas/Orientation"
+        mode:
+          $ref: "#/components/schemas/Mode"
         received_at:
           type: string
           format: date-time
@@ -144,7 +170,7 @@ components:
   responses:
     Error:
       description: |
-        400 the body is empty or the multipart has no `file`; 401 missing or wrong
+        400 the body is empty, the multipart has no `file` or `mode` is unknown; 401 missing or wrong
         token; 413 the image is over 25 MB.
       content:
         application/json:

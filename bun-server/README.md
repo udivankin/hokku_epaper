@@ -9,9 +9,10 @@ when you point its URL here.
 
 ## What it does
 
-- **Telegram bot** (long polling, in the same process). Allowed users send a photo, or
-  an image as a file for full resolution. The bot renders it at once and replies with
-  a preview of the dithered result and the time of the next refresh. `/status` reports
+- **Telegram bot** (long polling, in the same process). Allowed users send a photo,
+  which goes through the photo pipeline below, or an image **as a file**, which is
+  taken as [pre-dithered](PREDITHERED.md) and shown as-is. The bot renders it at once
+  and replies with a preview of the result and the time of the next refresh. `/status` reports
   what is on the frame and when it last polled.
 - **`GET|POST /hokku/screen/`**: the frame's poll. Returns the 192000-byte panel image
   with `X-Sleep-Seconds` (until the next refresh slot) and `X-Server-Time-Epoch`.
@@ -22,8 +23,11 @@ when you point its URL here.
   `UPLOAD_TOKEN`, sent as `X-Upload-Token: <token>` or `Authorization: Bearer <token>`.
   Use `X-Upload-Token` behind a proxy that uses `Authorization` for its own basic auth.
   The body is either multipart with the image in `file` (plus an optional `from`), or
-  the raw image bytes. The reply is JSON (`orientation`, `received_at`, `next_refresh`),
-  or the dithered preview PNG if you send `Accept: image/png`. Errors: 401 bad token,
+  the raw image bytes. `mode` (a form field, or `?mode=` for a raw body) is `photo`
+  (default) or `raw` for a [pre-dithered](PREDITHERED.md) image, the same as sending
+  the bot a file. The reply is JSON (`orientation`, `mode`, `received_at`, `next_refresh`),
+  or the dithered preview PNG if you send `Accept: image/png`. Errors: 400 empty body,
+  missing `file` or unknown `mode`, 401 bad token,
   403 uploads disabled, 413 over 25 MB, 422 unreadable image.
 
   ```bash
@@ -55,6 +59,13 @@ frame is rotated to suit the photo. Square photos use `SQUARE_ORIENTATION`.
 
 Not ported: face-aware cropping, the per-image classifier and the separate B&W and
 face presets. Every photo gets the general preset.
+
+**Pre-dithered images** (`raw`) skip all of that. At 800×480 or 480×800 each pixel
+becomes the nearest ink: pure primaries, the preview palette and the measured glass
+colours are all recognised, so a preview PNG sent back comes out byte-identical. Any
+other size is cover-cropped and resized, then snapped to the inks with error diffusion
+and no tonal changes. See [PREDITHERED.md](PREDITHERED.md), including a prompt for
+image generators.
 
 ## Configuration
 

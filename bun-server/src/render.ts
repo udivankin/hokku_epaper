@@ -13,6 +13,9 @@
 //   → nibble pack with the panel's 180° scan flip.
 //
 // Face detection, per-image classification and the B&W / face presets are left out.
+//
+// renderPredithered is the other path, for images already drawn in the six inks
+// (see ../PREDITHERED.md): no enhancement, each pixel just becomes its ink.
 
 import sharp from "sharp";
 import { clahe } from "./clahe";
@@ -21,6 +24,7 @@ import {
   DRC_ANCHOR_L,
   PALETTE_MEASURED,
   PALETTE_PREVIEW,
+  PALETTE_PURE,
   PANEL_H,
   PANEL_W,
   WHITE_INDEX,
@@ -29,6 +33,9 @@ import {
 import { readNpyFloat32 } from "./npy";
 
 export type Orientation = "landscape" | "portrait";
+/** `photo` runs the full photo pipeline; `raw` takes an image already drawn in the six inks. */
+export type RenderMode = "photo" | "raw";
+export const RENDER_MODES: readonly RenderMode[] = ["photo", "raw"];
 
 export const CONFIG = {
   gamma: 0.88,
@@ -400,16 +407,108 @@ function atkinson(buf: Float32Array, w: number, h: number): Uint8Array {
   return out;
 }
 
+// ── Pre-dithered images ─────────────────────────────────────────────────────
+
+/**
+ * Every colour a pre-dithered image may use for each ink: the pure primaries an image
+ * generator draws with, this server's preview palette and the measured glass.
+ */
+const INK_CANDIDATES = (() => {
+  const v = new Float64Array(3);
+  return [PALETTE_PURE, PALETTE_PREVIEW, PALETTE_MEASURED].flatMap((pal) =>
+    pal.map((rgb, ink) => ({ ink, rgb, lab: Array.from(rgbToLab(rgb[0], rgb[1], rgb[2], v)) })),
+  );
+})();
+
+/**
+ * Snap each pixel to the nearest ink colour (CIELAB). With `diffuse`, the error against
+ * that colour spreads Atkinson-style, so blends left by resizing dither again while
+ * pixels that already are an ink colour pass through unchanged.
+ */
+function snapToInks(buf: Float32Array, w: number, h: number, diffuse: boolean): Uint8Array {
+  const out = new Uint8Array(w * h);
+  const v = new Float64Array(3);
+  for (let y = 0; y < h; y++) {
+    const reverse = diffuse && CONFIG.serpentine && y % 2 === 0;
+    for (let s = 0; s < w; s++) {
+      const x = reverse ? w - 1 - s : s;
+      const i = (y * w + x) * 3;
+      const r = Math.min(Math.max(buf[i]!, 0), 255);
+      const g = Math.min(Math.max(buf[i + 1]!, 0), 255);
+      const b = Math.min(Math.max(buf[i + 2]!, 0), 255);
+      const [L, A, B] = rgbToLab(r, g, b, v) as unknown as [number, number, number];
+      let best = INK_CANDIDATES[0]!;
+      let bestD = Infinity;
+      for (const c of INK_CANDIDATES) {
+        const d = (L - c.lab[0]!) ** 2 + (A - c.lab[1]!) ** 2 + (B - c.lab[2]!) ** 2;
+        if (d < bestD) [best, bestD] = [c, d];
+      }
+      out[y * w + x] = best.ink;
+      if (!diffuse) continue;
+      const er = r - best.rgb[0];
+      const eg = g - best.rgb[1];
+      const eb = b - best.rgb[2];
+      for (const [dx, dy, wgt] of ATKINSON) {
+        const nx = x + (reverse ? -dx : dx);
+        const ny = y + dy;
+        if (nx < 0 || nx >= w || ny >= h) continue;
+        const j = (ny * w + nx) * 3;
+        buf[j]! += er * wgt;
+        buf[j + 1]! += eg * wgt;
+        buf[j + 2]! += eb * wgt;
+      }
+    }
+  }
+  return out;
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
-export async function renderPhoto(input: Uint8Array, opts: RenderOptions): Promise<Rendered> {
-  const src = await decodeToRgb(input);
+function orientationOf(src: { w: number; h: number }, opts: RenderOptions) {
   const orientation: Orientation =
     src.w > src.h ? "landscape" : src.h > src.w ? "portrait" : opts.squareOrientation;
   const portrait = orientation === "portrait";
-  // The panel memory is natively landscape; a portrait photo is composed upright
+  // The panel memory is natively landscape; a portrait image is composed upright
   // and turned into panel memory, the way the frame is turned to show it.
   const [vw, vh] = portrait ? [PANEL_H, PANEL_W] : [PANEL_W, PANEL_H];
+  return { orientation, portrait, vw, vh };
+}
+
+async function previewPngOf(view: Uint8Array, vw: number, vh: number): Promise<Buffer> {
+  const preview = new Uint8Array(view.length * 3);
+  for (let p = 0; p < view.length; p++) preview.set(PALETTE_PREVIEW[view[p]!]!, p * 3);
+  return sharp(preview, { raw: { width: vw, height: vh, channels: 3 } }).png().toBuffer();
+}
+
+export function render(input: Uint8Array, mode: RenderMode, opts: RenderOptions): Promise<Rendered> {
+  return mode === "raw" ? renderPredithered(input, opts) : renderPhoto(input, opts);
+}
+
+/**
+ * An image already drawn in the six inks. At the panel's own size (800×480 or
+ * 480×800) every pixel maps straight to its ink; any other size is cover-cropped
+ * and resized first, then snapped with error diffusion.
+ */
+export async function renderPredithered(input: Uint8Array, opts: RenderOptions): Promise<Rendered> {
+  const src = await decodeToRgb(input);
+  const { orientation, portrait, vw, vh } = orientationOf(src, opts);
+  const native = src.w === vw && src.h === vh;
+
+  let rgb: Uint8Array;
+  let mask: Uint8Array | null = null;
+  if (native) rgb = new Uint8Array(src.data);
+  else ({ rgb, mask } = await composeCanvas(src, vw, vh, opts.cropToFill));
+
+  const view = snapToInks(Float32Array.from(rgb), vw, vh, !native);
+  if (mask) for (let p = 0; p < view.length; p++) if (mask[p]) view[p] = WHITE_INDEX;
+
+  const idx = portrait ? rotateCw(view, vw, vh, 1) : view;
+  return { panel: packPanel(idx), orientation, previewPng: await previewPngOf(view, vw, vh) };
+}
+
+export async function renderPhoto(input: Uint8Array, opts: RenderOptions): Promise<Rendered> {
+  const src = await decodeToRgb(input);
+  const { orientation, portrait, vw, vh } = orientationOf(src, opts);
 
   let { rgb, mask } = await composeCanvas(src, vw, vh, opts.cropToFill);
   await enhance(rgb, vw, vh);
@@ -422,11 +521,5 @@ export async function renderPhoto(input: Uint8Array, opts: RenderOptions): Promi
   if (mask) for (let p = 0; p < idx.length; p++) if (mask[p]) idx[p] = WHITE_INDEX;
 
   const view = portrait ? rotateCcw(idx, PANEL_W, PANEL_H, 1) : idx;
-  const preview = new Uint8Array(view.length * 3);
-  for (let p = 0; p < view.length; p++) preview.set(PALETTE_PREVIEW[view[p]!]!, p * 3);
-  const previewPng = await sharp(preview, { raw: { width: vw, height: vh, channels: 3 } })
-    .png()
-    .toBuffer();
-
-  return { panel: packPanel(idx), orientation, previewPng };
+  return { panel: packPanel(idx), orientation, previewPng: await previewPngOf(view, vw, vh) };
 }

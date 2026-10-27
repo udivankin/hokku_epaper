@@ -11,7 +11,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { mkdir, rename } from "node:fs/promises";
 import { join } from "node:path";
-import { renderPhoto, type Orientation } from "./render";
+import { RENDER_MODES, render, type Orientation, type RenderMode } from "./render";
 import { nextSlot, parseTimes, secondsUntil } from "./schedule";
 import { Telegram, type TgMessage } from "./telegram";
 import { PANEL_BYTES } from "./f7";
@@ -37,6 +37,7 @@ interface Current {
   panel: Uint8Array;
   preview: Uint8Array;
   orientation: Orientation;
+  mode: RenderMode;
   receivedAt: string;
   from: string;
 }
@@ -76,6 +77,7 @@ async function loadCurrent(): Promise<Current | null> {
     panel: bytes,
     preview: (await preview.exists()) ? new Uint8Array(await preview.arrayBuffer()) : new Uint8Array(),
     orientation: m.orientation,
+    mode: m.mode ?? "photo",
     receivedAt: m.receivedAt,
     from: m.from,
   };
@@ -86,7 +88,7 @@ async function saveCurrent(c: Current) {
   await writeAtomic(files.preview, c.preview);
   await writeAtomic(
     files.meta,
-    JSON.stringify({ orientation: c.orientation, receivedAt: c.receivedAt, from: c.from }, null, 2),
+    JSON.stringify({ orientation: c.orientation, mode: c.mode, receivedAt: c.receivedAt, from: c.from }, null, 2),
   );
   current = c;
 }
@@ -99,21 +101,22 @@ function serialized<T>(job: () => Promise<T>): Promise<T> {
   return run;
 }
 
-/** Render a received photo and make it the one the frame shows next. */
-async function acceptPhoto(bytes: Uint8Array, from: string): Promise<Current> {
+/** Render a received image and make it the one the frame shows next. */
+async function acceptPhoto(bytes: Uint8Array, from: string, mode: RenderMode): Promise<Current> {
   const started = performance.now();
   const r = await serialized(() =>
-    renderPhoto(bytes, { cropToFill: CROP_TO_FILL, squareOrientation: SQUARE_ORIENTATION }),
+    render(bytes, mode, { cropToFill: CROP_TO_FILL, squareOrientation: SQUARE_ORIENTATION }),
   );
   const c: Current = {
     panel: r.panel,
     preview: r.previewPng,
     orientation: r.orientation,
+    mode,
     receivedAt: new Date().toISOString(),
     from,
   };
   await saveCurrent(c);
-  console.log(`rendered photo from ${from} (${r.orientation}) in ${Math.round(performance.now() - started)} ms`);
+  console.log(`rendered ${mode} image from ${from} (${r.orientation}) in ${Math.round(performance.now() - started)} ms`);
   return c;
 }
 
@@ -134,8 +137,10 @@ const jsonError = (status: number, error: string) => Response.json({ ok: false, 
 /**
  * POST /hokku/api/upload — the HTTP twin of sending the bot a photo.
  * Body: multipart/form-data with the image in `file` (optional `from` field), or the
- * raw image bytes with an image/* Content-Type. Replies with JSON, or with the
- * dithered preview PNG when the request sends `Accept: image/png`.
+ * raw image bytes with an image/* Content-Type. `mode` (form field or query
+ * parameter) is `photo` (default) or `raw` for an image already drawn in the six inks.
+ * Replies with JSON, or with the dithered preview PNG when the request sends
+ * `Accept: image/png`.
  */
 async function serveUpload(req: Request): Promise<Response> {
   if (!UPLOAD_TOKEN) return jsonError(403, "uploads are disabled: set UPLOAD_TOKEN");
@@ -143,6 +148,7 @@ async function serveUpload(req: Request): Promise<Response> {
 
   let bytes: Uint8Array;
   let from = req.headers.get("X-From") ?? "api";
+  let mode: string | null = new URL(req.url).searchParams.get("mode");
   const type = req.headers.get("Content-Type") ?? "";
   if (type.startsWith("multipart/form-data")) {
     const form = await req.formData();
@@ -151,27 +157,37 @@ async function serveUpload(req: Request): Promise<Response> {
     bytes = new Uint8Array(await file.arrayBuffer());
     const f = form.get("from");
     if (typeof f === "string" && f.trim()) from = f.trim();
+    const m = form.get("mode");
+    if (typeof m === "string" && m.trim()) mode = m.trim();
   } else {
     bytes = new Uint8Array(await req.arrayBuffer());
   }
+  mode ??= "photo";
+  if (!RENDER_MODES.includes(mode as RenderMode)) return jsonError(400, `mode must be one of ${RENDER_MODES.join(", ")}`);
   if (!bytes.length) return jsonError(400, "empty body");
   if (bytes.length > MAX_UPLOAD_BYTES) return jsonError(413, "image is over 25 MB");
 
   let c: Current;
   try {
-    c = await acceptPhoto(bytes, from.slice(0, 64));
+    c = await acceptPhoto(bytes, from.slice(0, 64), mode as RenderMode);
   } catch (err) {
     return jsonError(422, `couldn't process that image: ${(err as Error).message.split("\n")[0]}`);
   }
   const next = nextSlot(REFRESH_TIMES);
   if (req.headers.get("Accept")?.includes("image/png")) {
     return new Response(c.preview, {
-      headers: { "Content-Type": "image/png", "X-Orientation": c.orientation, "X-Next-Refresh": next.toISOString() },
+      headers: {
+        "Content-Type": "image/png",
+        "X-Orientation": c.orientation,
+        "X-Mode": c.mode,
+        "X-Next-Refresh": next.toISOString(),
+      },
     });
   }
   return Response.json({
     ok: true,
     orientation: c.orientation,
+    mode: c.mode,
     received_at: c.receivedAt,
     next_refresh: next.toISOString(),
     preview: "/hokku/preview.png",
@@ -259,8 +275,9 @@ function clientIp(req: Request, peer: string | undefined): string {
 
 const HELP =
   "Send me a photo and I'll put it on the frame.\n\n" +
-  "Tip: send it as a file (paperclip → File) to keep full resolution; " +
-  "Telegram shrinks ordinary photos to 1280 px, which is still plenty for the panel.\n\n" +
+  "Photos are cropped, tuned and dithered for the six-colour panel.\n" +
+  "Send an image as a file (paperclip → File) when it is already drawn in the panel's six colours " +
+  "(ideally 800×480 or 480×800): it is shown as-is, without the photo processing.\n\n" +
   "The frame shows it at its next scheduled refresh.\n" +
   "/status — what the frame shows and when it refreshes next";
 
@@ -268,7 +285,7 @@ function statusText(): string {
   const next = nextSlot(REFRESH_TIMES);
   const lines = [
     current
-      ? `Showing: photo from ${current.from}, received ${new Date(current.receivedAt).toLocaleString()} (${current.orientation}).`
+      ? `Showing: ${current.mode === "raw" ? "pre-dithered image" : "photo"} from ${current.from}, received ${new Date(current.receivedAt).toLocaleString()} (${current.orientation}).`
       : "No photo yet.",
   ];
   if (lastContact) {
@@ -286,11 +303,12 @@ function statusText(): string {
   return lines.join("\n");
 }
 
-function photoFileId(msg: TgMessage): string | null {
-  if (msg.photo?.length) return msg.photo.at(-1)!.file_id; // largest size last
+/** A Telegram photo goes through the photo pipeline; an image sent as a file is taken as pre-dithered. */
+function imageOf(msg: TgMessage): { fileId: string; mode: RenderMode } | null {
+  if (msg.photo?.length) return { fileId: msg.photo.at(-1)!.file_id, mode: "photo" }; // largest size last
   const doc = msg.document;
   if (doc && (doc.mime_type?.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif|avif|gif|tiff?|bmp)$/i.test(doc.file_name ?? ""))) {
-    return doc.file_id;
+    return { fileId: doc.file_id, mode: "raw" };
   }
   return null;
 }
@@ -305,16 +323,16 @@ async function handleMessage(tg: Telegram, msg: TgMessage, allowed: Set<number>)
   if (text.startsWith("/status")) return void (await tg.reply(msg, statusText()));
   if (text.startsWith("/start") || text.startsWith("/help")) return void (await tg.reply(msg, HELP));
 
-  const fileId = photoFileId(msg);
-  if (!fileId) return void (await tg.reply(msg, HELP));
+  const image = imageOf(msg);
+  if (!image) return void (await tg.reply(msg, HELP));
 
-  const bytes = await tg.download(fileId);
+  const bytes = await tg.download(image.fileId);
   if (bytes.length > MAX_UPLOAD_BYTES) return void (await tg.reply(msg, "That file is over 25 MB."));
-  const c = await acceptPhoto(bytes, msg.from?.first_name ?? String(userId));
+  const c = await acceptPhoto(bytes, msg.from?.first_name ?? String(userId), image.mode);
   await tg.replyPhoto(
     msg,
     c.preview,
-    `Queued (${c.orientation}). The frame shows it at its next refresh, ${timeOf(nextSlot(REFRESH_TIMES))}.`,
+    `Queued (${c.orientation}${c.mode === "raw" ? ", pre-dithered, shown as-is" : ""}). The frame shows it at its next refresh, ${timeOf(nextSlot(REFRESH_TIMES))}.`,
   );
 }
 

@@ -37,6 +37,10 @@ appliance image, Debian package) is gone; a small Bun server replaced it.
    curl -H "X-Upload-Token: $UPLOAD_TOKEN" -F file=@photo.jpg http://localhost:8080/hokku/api/upload
    ```
 
+Artwork already drawn in the panel's six colours (including AI-generated, see the
+[prompt](bun-server/PREDITHERED.md)) goes to the bot as a file, or with `-F mode=raw`,
+and is shown as-is instead of being processed like a photo.
+
 The frame sleeps between refresh slots (06:00, 12:00 and 18:00 by default), so a new
 photo appears at the next one. Configuration is in the [server README](bun-server/README.md).
 

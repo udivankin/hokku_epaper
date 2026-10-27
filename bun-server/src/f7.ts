@@ -25,6 +25,16 @@ export const PALETTE_PREVIEW: readonly [number, number, number][] = [
   [20, 120, 40],
 ];
 
+/** Pure sRGB primaries, the colours an image generator is asked to draw with. */
+export const PALETTE_PURE: readonly [number, number, number][] = [
+  [0, 0, 0],
+  [255, 255, 255],
+  [255, 255, 0],
+  [255, 0, 0],
+  [0, 0, 255],
+  [0, 255, 0],
+];
+
 export const WHITE_INDEX = 1;
 
 /** Palette index → controller nibble (0x4 and 0x7 are undefined on this controller). */
