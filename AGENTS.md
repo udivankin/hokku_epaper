@@ -182,4 +182,6 @@ URL and notes to `docs/datasheets/ATTRIBUTION.md` and a `dl` line to
 Do this in the same commit as any other change that references the datasheet.
 
 ## Repository
-- GitHub: `https://github.com/defl/hokku_epaper`
+- GitHub: `https://github.com/udivankin/hokku_epaper` (the `origin` remote).
+- Forked from `https://github.com/defl/hokku_epaper`; that repo is not a remote here
+  and nothing is pushed or proposed upstream.
