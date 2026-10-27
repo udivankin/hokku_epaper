@@ -1,53 +1,23 @@
-# Direct dependencies — install these, pip resolves the rest.
-# Versions are not pinned; use the versions that work with your Python.
+# Direct dependencies of the Python device tools (tools/ and python/hokku) —
+# install these, pip resolves the rest. Versions are not pinned.
+# The photo server itself is bun-server/ (Bun + sharp), not Python.
 
-# Image processing (webserver)
 numpy
-numba                # JIT-compiled dither inner loop (NumbaDither)
-colour-science       # CAM16-UCS palette LUT — lazy-imported only when used
 Pillow
-pillow-heif          # HEIC/HEIF support
-pillow-avif-plugin   # AVIF support
-pillow-jxl-plugin    # JPEG XL support
+packaging
 
-# Web server
-Flask
-waitress             # WSGI server with a bounded request-thread pool
-zeroconf
-zstd                 # panel cache compression
-
-# Firmware tools
-esptool
+# Flashing and serial consoles
 pyserial
+esptool
 esp-idf-nvs-partition-gen
-rich
-rich-click
 
-# Runtime utilities
-psutil               # auto worker-count (resolve_worker_count) + memory-budget tests
-opencv-python-headless
-resvg-py           # SVG rasterisation (bundles Rust binary; no system lib required)
+# Reverse-engineering helpers (epd_disasm, _dis_phoenix*) and PhoenixMC automation (Windows only)
+capstone
+pyelftools
+pywinauto; sys_platform == "win32"
 
-# Tests
+# Tests and dev tools
 pytest
-pytest-cov
-pytest-xdist
-tzdata               # IANA timezone data for zoneinfo on Windows (validate_timezone test)
-
-# Dev tools
-defusedxml           # safe XML/SVG parsing (replaces xml.etree in user-upload path)
 pre-commit
 ruff
 pyright
-
-# Colour-analysis tooling (tools/ only — deliberately NOT in pyproject runtime
-# dependencies, so the wheel and .deb stay unchanged). scipy in particular is
-# load-bearing beyond its own API: colour-science installs a MagicMock as
-# sys.modules["scipy"] when scipy is absent, and numba then dies importing it
-# (AttributeError: __version__). The server survives only because it imports
-# colour lazily inside the CAM16 LUT builders, so numba always wins the race —
-# a tool that imports colour at top level would break the production dither.
-scipy                # optimisation, ndimage, stats
-scikit-learn         # preference-model fitting, cross-validation, regularisation
-matplotlib           # charts (cam_figures draws with OpenCV primitives without it)
-pandas               # per-image measurement tables

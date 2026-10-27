@@ -6,39 +6,11 @@ __pycache__/
 .cache/
 .temp/
 
-# Runtime DB files that may be created in the source tree by accident
-image_manager.json
-serve_scheduler.json
-
-# Debian build artifacts (land in builds/, never the repo root)
-/builds/
+# Python build artifacts
 build/
-# test_server/: commit the portable config + README + an empty cache/ dir, and
-# ignore local runtime state (rendered cache, local overrides, logs).
-test_server/*
-!test_server/config.json
-!test_server/README.md
-!test_server/cache/
-test_server/cache/*
-!test_server/cache/.gitkeep
-# e2e/: the committed deb-in-docker test harness (Dockerfile, driver config, runner).
-!test_server/e2e/
-*.deb
-*.buildinfo
-*.changes
-*.log
-python/.pybuild/
-python/build/
 python/dist/
-python/firmware/
-python/default_image/
 python/*.egg-info/
-python/debian/hokku-server/
-python/debian/.debhelper/
-python/debian/debhelper-build-stamp
-python/debian/files
-python/debian/*.debhelper
-python/debian/*.substvars
+*.log
 
 # Releases — shared dir holding every variant's built firmware
 # (hokku-<vendor>_<model>-<version>.{bin,img}); build artifacts, never committed.
@@ -72,12 +44,6 @@ firmware/bigme_f7/image/xr872/xr_system.img.version
 # Local toolchain / config
 FlashTools_repo/
 settings_win.ini
-# Developer's local run config (machine-specific paths). Copy
-# python/hokku/webserver/config/config.json.example to create one.
-python/config.json
 
 # Editor / IDE
 .vscode/
-
-# pi-gen clone created by os/pi/build-image.sh (an embedded git repo)
-.pigen/

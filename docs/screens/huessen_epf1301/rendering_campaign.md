@@ -405,7 +405,7 @@ Recorded because each was believed for a while and each was wrong.
 
 ## 13. The apparatus
 
-Code is in [`tools/camcal/`](../../../tools/camcal/README.md) plus
+Code is in [`tools/camcal/`](https://github.com/defl/hokku_epaper/blob/main/tools/camcal/README.md) plus
 `tools/render_bank.py`, `tools/param_search.py`, `tools/judge_capture.py` and
 `tools/judge_pick.py`. Captures and fitted artefacts are gigabytes of DNG under
 the gitignored `build/camcal/` and are reproducible from the panel; the rig

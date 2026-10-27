@@ -75,7 +75,29 @@ jobs:
       - name: Test common/esp32
         run: ctest --test-dir firmware/common/esp32/test/build --output-on-failure
 
-  test-webserver:
+  test-bun-server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bun-server
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint OpenAPI schema
+        run: bunx @redocly/cli@2.0.8 lint openapi.yaml
+
+  test-python:
     runs-on: ubuntu-latest
 
     steps:
@@ -90,9 +112,9 @@ jobs:
         run: pip install -e "python/[test]"
 
       - name: Run tests
-        run: pytest -m "not time_intensive"
+        run: pytest
 
-  lint-webserver:
+  lint-python:
     runs-on: ubuntu-latest
 
     steps:
@@ -109,78 +131,21 @@ jobs:
         run: |
           python -m venv .venv
           .venv/bin/pip install --upgrade pip
-          .venv/bin/pip install -e "python/[test]"
-          .venv/bin/pip install ruff==0.15.14 pyright==1.1.409
-
-      - name: Ruff lint
-        run: .venv/bin/ruff check python/
-
-      - name: Ruff format check
-        run: .venv/bin/ruff format --check python/
-
-      - name: Pyright
-        run: .venv/bin/pyright python/hokku python/tests
-
-  test-tools:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      # tools/ CLIs (esp32_setup, hokku_setup, hokku_config, ...) import the hokku
-      # package and pyserial/esptool — all pulled in by the hokku-server install.
-      #
-      # requirements.txt on top of it, because the colour-analysis tools reach
-      # for scipy, pandas, scikit-learn and matplotlib. Those are deliberately
-      # NOT pyproject runtime dependencies — that is what keeps them out of the
-      # wheel and the .deb — so installing the package alone leaves tools/
-      # unimportable here even though it works in a dev checkout.
-      - name: Install dependencies
-        run: pip install -e "python/[test]" -r requirements.txt
-
-      - name: Run tools tests
-        run: pytest tools/tests
-
-  lint-tools:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Create venv + install
-        run: |
-          python -m venv .venv
-          .venv/bin/pip install --upgrade pip
-          # requirements.txt too: pyright resolves imports for real, and the
-          # colour-analysis tools import scipy, pandas and scikit-learn. Those
-          # are deliberately not pyproject runtime dependencies (it is what
-          # keeps them out of the wheel and the .deb), so without this every
-          # one of them reports reportMissingImports.
           .venv/bin/pip install -e "python/[test]" -r requirements.txt
           # Pinned last on purpose: requirements.txt carries ruff and pyright
           # unpinned, and lint results have to be reproducible run to run.
           .venv/bin/pip install ruff==0.15.14 pyright==1.1.409
 
       - name: Ruff lint
-        run: .venv/bin/ruff check tools/
+        run: .venv/bin/ruff check python/ tools/
 
       - name: Ruff format check
-        run: .venv/bin/ruff format --check tools/
+        run: .venv/bin/ruff format --check python/ tools/
 
-      # pyrightconfig.json analyses tools/ as Windows (ctypes.windll) and excludes
-      # the tools needing packages that can't install on Linux (pywinauto, etc.).
+      # pyrightconfig.json analyses as Windows (ctypes.windll) and excludes the
+      # tools needing packages that can't install on Linux (pywinauto, etc.).
       - name: Pyright
-        run: .venv/bin/pyright tools
+        run: .venv/bin/pyright
 
   lint-firmware-huessen_epf1301:
     runs-on: ubuntu-latest
@@ -370,246 +335,3 @@ jobs:
         with:
           name: hokku-bigme_f7-firmware
           path: firmware/release/hokku-bigme_f7-*.img
-
-  build-webserver-deb:
-    needs: [test-webserver, lint-webserver, build-firmware-huessen_epf1301, build-firmware-seeedstudio_e1004, build-firmware-bigme_f7]
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            build-essential debhelper dh-python python3-setuptools pybuild-plugin-pyproject
-
-      # The "Flash a screen" feature ships both merged firmwares inside the
-      # .deb. debian/install picks up firmware/release/hokku-* wildcarded, so
-      # place both build jobs' artifacts there before building.
-      - name: Download ESP32 firmware artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: hokku-huessen_epf1301-firmware
-          path: python/firmware/release
-
-      - name: Download Seeed E1004 firmware artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: hokku-seeedstudio_e1004-firmware
-          path: python/firmware/release
-
-      - name: Download Bigme F7 firmware artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: hokku-bigme_f7-firmware
-          path: python/firmware/release
-
-      # Default placeholder image, same reasoning as the firmware staging
-      # above: debian/install can only reference paths inside python/, not
-      # the repo root, so stage it in before building.
-      - name: Stage default placeholder image
-        run: |
-          mkdir -p python/default_image
-          cp images/logo/logo_alt_white.png python/default_image/
-
-      - name: Build .deb
-        working-directory: python
-        run: dpkg-buildpackage -us -uc -b
-
-      # Guard the two ways this package has silently shipped broken:
-      #  1. dh_python3 guessing pyproject.toml's deps into Depends. esptool maps to
-      #     a Debian package absent from many apt sources, so the .deb refuses to
-      #     install ("Depends: esptool but it is not installable"). Prevented by
-      #     --no-guessing-deps in debian/rules; those deps are pip-installed by postinst.
-      #  2. "Fixing" (1) by dropping ${python3:Depends} from debian/control, which makes
-      #     dh_python3 skip the package entirely ("no package to act on"), so the hokku
-      #     module never ships and the service dies with "No module named 'hokku'".
-      # Both produced a green build and a package that failed only on the target.
-      - name: Verify .deb dependencies and contents
-        run: |
-          set -euo pipefail
-          deb=$(ls hokku-server_*.deb)
-          echo "Verifying $deb"
-          depends=$(dpkg-deb -f "$deb" Depends)
-          echo "Depends: $depends"
-
-          # These are pip-installed by postinst and must never appear as apt deps.
-          pip_only="esptool esp-idf-nvs-partition-gen numba opencv-python-headless"
-          pip_only="$pip_only pillow-heif pillow-avif-plugin pillow-jxl-plugin"
-          pip_only="$pip_only colour-science resvg-py zeroconf"
-
-          # Exact package-name match, so python3-numba wouldn't false-positive on numba.
-          fail=0
-          for dep in $(printf '%s\n' "$depends" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]].*//'); do
-            for bad in $pip_only; do
-              if [ "$dep" = "$bad" ]; then
-                echo "::error::pip-only dependency '$dep' leaked into Depends. dh_python3 guessed it from pyproject.toml — keep --no-guessing-deps in python/debian/rules." >&2
-                fail=1
-              fi
-            done
-          done
-
-          # The Python package must actually ship, i.e. dh_python3 processed the package.
-          # Capture the listing first and match with a here-string: piping into `grep -q`
-          # makes grep exit early, SIGPIPEs dpkg-deb, and under `pipefail` that reads as
-          # "not found" — which would fail the build on a perfectly good package.
-          contents=$(dpkg-deb -c "$deb")
-          if ! grep -q 'usr/lib/python3/dist-packages/hokku/__init__.py' <<<"$contents"; then
-            echo "::error::hokku module missing from the .deb — dh_python3 skipped the package. python/debian/control must keep \${python3:Depends} in Depends." >&2
-            grep dist-packages <<<"$contents" | head -20 >&2 || true
-            fail=1
-          fi
-
-          # The dashboard's runtime data files must ship to /usr/share/hokku-server.
-          # These are installed by debian/install; a missing template/asset builds
-          # green and only 500s the dashboard at runtime (TemplateNotFound), and
-          # the fonts/ subdir in particular was silently dropped for a while when
-          # static files were hand-listed instead of copied as a directory.
-          # dpkg-deb -c lists paths as "./usr/share/...", so match the trailing
-          # fragment rather than an absolute path.
-          for f in \
-            hokku-server/config.json.example \
-            hokku-server/templates/index.html \
-            hokku-server/static/logo.png \
-            hokku-server/static/fonts/; do
-            if ! grep -q "$f" <<<"$contents"; then
-              echo "::error::.deb is missing '/usr/share/$f' — check python/debian/install." >&2
-              fail=1
-            fi
-          done
-
-          [ "$fail" -eq 0 ] || exit 1
-          echo "OK: no pip-only deps in Depends; hokku module + runtime data files present."
-
-      - name: Collect artifacts
-        run: |
-          mkdir -p build
-          mv hokku-server_*.deb hokku-server_*.buildinfo hokku-server_*.changes build/
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: hokku-server-deb
-          path: build/hokku-server_*.deb
-
-  # Build the pip-installable wheel and prove it actually carries the runtime
-  # data files. Running from a source checkout hides their absence (Flask's
-  # relative template/static lookup hits the live tree), so a wheel missing
-  # them builds green and only fails on `pip install` — the dashboard 500s with
-  # jinja2 TemplateNotFound. This job is the guard the deb's content-check is
-  # for the .deb. The wheel is attached to GitHub releases by build-image.yml.
-  build-webserver-wheel:
-    needs: [test-webserver, lint-webserver]
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Build wheel
-        working-directory: python
-        run: |
-          pip install --upgrade build
-          python -m build --wheel --outdir dist
-
-      - name: Verify wheel contents and scrub for leaks
-        working-directory: python
-        run: |
-          set -euo pipefail
-          whl=$(ls dist/hokku_server-*.whl)
-          echo "Inspecting $whl"
-          contents=$(python -m zipfile -l "$whl")
-          echo "$contents"
-
-          # Every runtime data file must be present, or a pip install is broken.
-          require() {
-            if ! grep -q "$1" <<<"$contents"; then
-              echo "::error::wheel is missing '$1' — check [tool.setuptools.package-data] in python/pyproject.toml" >&2
-              exit 1
-            fi
-          }
-          require 'hokku/webserver/templates/index.html'
-          require 'hokku/webserver/static/logo.png'
-          require 'hokku/webserver/static/fonts/'
-          require 'hokku/webserver/config/config.json.example'
-          require 'hokku/webserver/models/face_detection_yunet_2023mar.onnx'
-
-          # Leak guard: the shipped example config must never carry real WiFi
-          # credentials (or any other populated secret field).
-          python -m zipfile -e "$whl" _wheel_check/
-          example=$(find _wheel_check -name config.json.example)
-          python -c "import json,sys; c=json.load(open(sys.argv[1])); bad=[k for k in ('flash_wifi_ssid','flash_wifi_pass','flash_wifi_ssid2','flash_wifi_pass2') if c.get(k)]; sys.exit('::error::example config in wheel carries populated secret fields: '+repr(bad)) if bad else print('OK: no credentials embedded in example config')" "$example"
-          rm -rf _wheel_check
-          echo "OK: wheel carries all runtime data files."
-
-      # Prove the wheel is actually installable and usable, not just well-formed:
-      # a clean-venv `pip install` resolves every runtime dependency (the .deb
-      # pip-installs several of these in postinst because apt can't provide them —
-      # for the wheel, pip must do it unaided), and the INSTALLED package resolves
-      # its templates/static from site-packages. That last check is the #26 bug
-      # class — data files present in the tree but not in the installed package.
-      - name: Smoke-test the installed wheel
-        working-directory: python
-        run: |
-          set -euo pipefail
-          python -m venv _venv
-          _venv/bin/pip install --upgrade pip >/dev/null
-          _venv/bin/pip install dist/hokku_server-*.whl
-          _venv/bin/python -c "from hokku.webserver import flask_app as f; from pathlib import Path; tf=Path(f._resolve_template_folder(None)); sf=f._resolve_static_folder(); assert (tf/'index.html').is_file(), tf; assert (sf/'logo.png').is_file(), sf; print('OK: installed wheel imports and resolves templates+static from the package')"
-          rm -rf _venv
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: hokku-server-wheel
-          path: python/dist/hokku_server-*.whl
-
-  test-installer:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install dependencies
-        run: pip install -e "installer/"
-
-      - name: Import check
-        run: |
-          python -c "import hokku.installer"
-          python -c "from hokku.installer.validators import validate_ssid, validate_wifi_password, validate_mdns_hostname"
-          python -c "from hokku.installer.flask_app import create_app"
-
-  build-installer-deb:
-    needs: [test-installer]
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            build-essential debhelper dh-python python3-setuptools pybuild-plugin-pyproject
-
-      - name: Build .deb
-        working-directory: installer
-        run: dpkg-buildpackage -us -uc -b
-
-      - name: Collect artifacts
-        run: |
-          mkdir -p build
-          mv hokku-installer_*.deb hokku-installer_*.buildinfo hokku-installer_*.changes build/
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: hokku-installer-deb
-          path: build/hokku-installer_*.deb

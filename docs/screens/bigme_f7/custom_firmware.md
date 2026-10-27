@@ -86,7 +86,7 @@ The version is reported in `X-Firmware-Version` and the frame-state `fw`.
 - `frame` — upload one ready-made 192000-byte panel buffer over this console and
   display it. No server, no WiFi, no render pipeline: the host sends exact bytes,
   the device shows them. For bring-up and colour measurement, where the picture
-  on the glass has to be known precisely (see [`../../color_calibration.md`](../../color_calibration.md)).
+  on the glass has to be known precisely (see [Colour accuracy](../../colour_accuracy.md)).
   Wire exchange is in [`firmware/common/all/frame_proto.h`](../../../firmware/common/all/frame_proto.h);
   drive it with `tools/send_frame.py`. Takes the same OTA/refresh mutex as
   `ota`, so it refuses rather than racing a refresh.

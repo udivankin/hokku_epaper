@@ -1,6 +1,8 @@
-"""Hokku — e-paper image server and screen flasher.
+"""Hokku — screen specs and flashing helpers for the device tools in ``tools/``.
 
 Subpackages:
-- ``hokku.webserver`` — the Flask image server (the ``hokku-server`` app).
-- ``hokku.screens`` — per-screen support libraries (e.g. ``hokku.screens.huessen_epf1301``).
+- ``hokku.screens`` — per-screen specs: geometry, palette, wire packing, NVS config.
+- ``hokku.common`` — shared flashing code (``esp32``, ``xr872``) and firmware lookup.
+
+The photo server is ``bun-server/``, not part of this package.
 """

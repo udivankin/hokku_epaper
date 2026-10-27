@@ -22,8 +22,7 @@ letter (FCC ID `2A8EM-F7`); only the sales region differs.
 |---|---|
 | **Buy** | [Hardware overview](../../hardware.md#bigme-f7) |
 | **Convert to Hokku** | [Bootstrap guide](bootstrap.md) — one-time USB flash |
-| **Install the server** | [Appliance image](../../appliance.md) · [manual install](../../install.md) |
-| **Use** | [User manual](../../manual.md) |
+| **Run the server** | [bun-server](../../../bun-server/README.md) |
 
 > ⚠️ **Read [bootstrap.md](bootstrap.md) before buying.** Converting a stock F7
 > replaces the vendor firmware via the chip's mask BROM, and is a more involved

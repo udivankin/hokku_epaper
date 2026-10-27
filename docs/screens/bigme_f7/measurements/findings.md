@@ -192,7 +192,7 @@ except oklab. A long chain of measurement appeared to confirm it, identify
 three different answers. **All three were wrong, for one reason.**
 
 Every LUT comparison was run at `hue_cutoff_deg=30, neutral_chroma=12`. Production
-ships **`95, 8`** ([`presets.py`](../../../../python/hokku/webserver/presets.py)),
+ships **`95, 8`** ([`presets.py`](https://github.com/defl/hokku_epaper/blob/main/python/hokku/webserver/presets.py)),
 and those two numbers *are* the hue-aware gate. At the shipped values `hue_aware`
 is **bit-identical to `euclidean` on skin colours**. The entire effect being
 characterised, and every fix proposed for it, belonged to a configuration that has

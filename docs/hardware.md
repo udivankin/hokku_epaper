@@ -105,41 +105,10 @@ The panel bring-up work this port is based on was contributed by
 
 ## The Server
 
-<img src="../images/pi.png" width="200">
-
-The image server runs on almost anything — a cheap ARM board, a spare laptop, a
-NAS, a desktop. The only hard requirement is **512 MB of RAM**, plus a few GB of
-disk for photos. If you have a spare computer sitting around, that's your server.
-
-A **Raspberry Pi Zero 2 W** is the recommended choice: cheap, silent, uses almost
-no power, and fast enough for a multi-frame setup. It's also the board the
-[appliance image](appliance.md) is built for — write one file to an SD card and
-the whole setup is a web form.
-
-If you want to buy something new, the cheapest route is AliExpress — ARM boards
-and accessories go for a fraction of the prices below, at the cost of weeks of
-shipping and variable quality. If you're in the US and want it tomorrow from
-reputable brands, this is the recommended build:
-
-| Item | Link | Price |
-|------|------|------:|
-| Raspberry Pi Zero 2 W (board + essentials kit) | [Amazon](https://amzn.to/4wz5jtY) | $42 |
-| Aluminium case with passive cooling and 4-port USB hub | [Amazon](https://amzn.to/4eLkzxk) | $9 |
-| Official Pi power supply (5.1 V / 2.5 A) | [Amazon](https://amzn.to/4uhEbhy) | $22 |
-| USB-C cable (data-capable, for flashing a frame) | [Amazon](https://amzn.to/4wAjkrh) | $10 |
-| SanDisk 64 GB microSD card | [Amazon](https://amzn.to/4dpocGI) | $24 |
-| USB SD card reader | [Amazon](https://amzn.to/49K7pwY) | $4 |
-| **Total** | | **$111** |
-
-A few notes:
-
-- The kit (row 1) includes the Pi Zero 2 W board, header, heatsink, USB cable, and HDMI adapter.
-- The case (row 2) does **not** include the board — it pairs with the kit above.
-- The USB-C cable must be data-capable (not charge-only). The linked cable supports 10 Gbps / 3 A and works reliably for flashing.
-
-> The Amazon links on this page — both the kit above and the frame listings — are affiliate links. Clicking them costs you absolutely nothing extra: the price is identical either way. I get a few percent from Amazon, and if enough people do this, maybe one day there'll be enough in the jar to add the next screen to the lineup.
-
----
+The server is [`bun-server/`](../bun-server/README.md): one small Bun process that runs
+the Telegram bot and answers the frame. Anything that runs Bun 1.4.4 will do — the
+existing VPS, a Raspberry Pi, a NAS. It renders one photo at a time in about half a
+second; rendering a 26-megapixel photo peaked at about 250 MB of RAM.
 
 ## Anything else?
 

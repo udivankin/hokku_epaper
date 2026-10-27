@@ -1,6 +1,6 @@
 ﻿# Agent rules for hokku_epaper
 
-Sub-directory rules: [firmware/huessen_epf1301/AGENTS.md](firmware/huessen_epf1301/AGENTS.md) | [python/AGENTS.md](python/AGENTS.md)
+Sub-directory rules: [firmware/huessen_epf1301/AGENTS.md](firmware/huessen_epf1301/AGENTS.md) | [bun-server/README.md](bun-server/README.md)
 
 ## Firmware flashing — STOP rules (read before ANY flash)
 
@@ -76,6 +76,8 @@ the answer is to flash it (subject to the STOP rules above), not to reach for
 HTTP.
 
 ## Python environment
+Python is only the device tooling now: `python/hokku` (screen specs, flashing helpers)
+and the scripts in `tools/`.
 - Venv: `.venv/` at repo root
 - Windows: `.venv/Scripts/python` | Linux/macOS: `.venv/bin/python`
 - Dependencies: `requirements.txt` (direct deps, unpinned; pip resolves transitive)
@@ -102,7 +104,7 @@ HTTP.
 
 ## Git / release rules
 - CAN `git commit`; commit message MUST be descriptive
-- CAN `git push` (no `--tags`) as part of the dev build workflow below — this is the normal agent push
+- CAN `git push` (no `--tags`) — this is the normal agent push
 - CANNOT `git tag` without explicit human permission
 - CANNOT push a GitHub release without explicit human permission
 - CANNOT force-push a tag without explicit human permission
@@ -110,56 +112,19 @@ HTTP.
 - Ask explicitly before every `gh release upload`, `gh release delete-asset`, `gh release create`, `gh release edit`, or force-push of a tag
 - Before running `gh` commands after authorisation, state exact filenames and release tag for user veto
 
-## Versioning — app (webserver + Debian package)
+## Photo server — `bun-server/`
 
-Versions follow semantic versioning with an even/odd PATCH convention:
-- **Even PATCH (0, 2, 4, …)** — release track; human-tagged only, never set by agents
-- **Odd PATCH (1, 3, 5, …)** — development track; set by agents on every push
+The frame is served by `bun-server/` (Bun 1.4.4 + sharp), which replaced the Python
+web server and its Debian package. It shows the last photo sent to the Telegram bot
+or `POST /hokku/api/upload`; see its README. Before pushing a change to it, run
+`bun run typecheck` there, and if `openapi.yaml` changed,
+`bunx @redocly/cli@2.0.8 lint openapi.yaml`. Its image pipeline is a port of the
+former Python renderer; keep `src/f7.ts` in step with
+`python/hokku/screens/bigme_f7/display.py` and `assets/correction_lut.npy` with the
+`correction_lut.npy` next to it.
 
-Dev version formula (run before every `git push`):
-```
-LAST_TAG  = git describe --tags --match "v[0-9]*" --abbrev=0
-MAJOR, MINOR, PATCH = parse LAST_TAG (strip leading v, split on ., drop any
-                      prerelease suffix — v4.0.0-beta1 gives PATCH = 0, not "0-beta1")
-ODD_PATCH = PATCH + 1
-CUR       = the highest dev number ever released for this base, i.e. the
-            largest N in any `MAJOR.MINOR.ODD_PATCH~dev.N` entry of
-            python/debian/changelog at origin/main (none -> CUR = 0):
-            git show origin/main:python/debian/changelog \
-              | sed -n 's/^hokku-server (MAJOR\.MINOR\.ODD_PATCH~dev\.\([0-9]*\)-.*/\1/p' \
-              | sort -n | tail -1
-N         = CUR + 1
-DEV_VER   = MAJOR.MINOR.ODD_PATCH-dev.N   (semver, e.g. 3.0.1-dev.47)
-DEB_VER   = MAJOR.MINOR.ODD_PATCH~dev.N-1 (Debian, e.g. 3.0.1~dev.47-1)
-PEP_VER   = MAJOR.MINOR.ODD_PATCH.devN    (PEP 440, e.g. 3.0.1.dev47)
-```
-
-**N comes from main's changelog, NOT from a commit count.** It used to be
-`git rev-list LAST_TAG..HEAD --count`, which regresses as soon as PRs are
-squash-merged: a branch counts its own commits, but the squash lands on main as
-one, so main's count sits well below the number the last merged branch declared.
-The next branch then computes a *lower* N than main already has, and apt stops
-seeing an upgrade — the whole point of the scheme. (Observed 2026-07-28: main
-declared `4.0.1.dev11` while its own rev-list count was 7, so a 2-commit branch
-computed `dev.9` and would have gone backwards.)
-
-Read the changelog, not main's `pyproject.toml` version: a prerelease tag
-(`v4.0.0-beta3`) resets pyproject to `4.0.0b3` but leaves ODD_PATCH unchanged,
-so "main's current `.devN`, else 0" would restart at `dev.1` below dev builds
-already shipped on that base. (Happened after beta2: `4.0.1~dev.24` was followed
-by `4.0.1~dev.5`.) The changelog is append-only, so its maximum only grows.
-
-If two branches are open at once they will compute the same N; the second to
-merge must recompute against the new main after merging it in, exactly as it
-would re-resolve any other conflict in these files.
-
-Before every `git push`, agents MUST:
-1. Compute the dev version using the formula above
-2. Update `python/pyproject.toml` `version = "..."` to `PEP_VER`
-3. Update `python/debian/changelog` first entry version to `DEB_VER`
-4. Include these version file changes in the same commit as the code change
-
-Agents MUST NOT use even PATCH — that is exclusively the release track (see `/release`).
+The wire protocol it speaks to the frame is the firmware's — a change there is a
+`PROTOCOL` bump (below), not a server-only change.
 
 ## Versioning — firmware
 
@@ -183,11 +148,11 @@ stub for it under `firmware/common/esp32/test/mocks/`.
 
 **Rule**: every flasher MUST name, for **each** region it writes, the file (or what the
 image is), its size, and the destination offset/slot — before writing it. This holds
-equally for the web "Flash a screen" UI and the `tools/` CLI scripts; a bare
-"Flashing firmware..." or "Writing configuration..." is not enough. A flash that writes
-three regions prints three lines. The descriptions live next to the flashing code (e.g.
-`describe_flash_parts` / `describe_config_part` in `hokku.common.esp32.flasher`) and are
-shared by every front end, so the web UI and the CLI cannot drift apart.
+for every `tools/` flashing script; a bare "Flashing firmware..." or "Writing
+configuration..." is not enough. A flash that writes three regions prints three lines.
+The descriptions live next to the flashing code (e.g. `describe_flash_parts` /
+`describe_config_part` in `hokku.common.esp32.flasher`) and are shared by every front
+end, so they cannot drift apart.
 
 Rationale: a flash silently landing in a partition the device does not boot cost real
 debugging time. What the operator sees must match what the flasher actually does.

@@ -2,7 +2,7 @@
 
 Custom firmware for the Hokku/Huessen 13.3" Spectra 6 e-paper frame. Downloads images from the server, displays them, and deep sleeps until the server tells it to wake.
 
-For flashing and configuration see [docs/install.md](../../docs/install.md).
+For flashing and configuration see the [upstream install guide](https://github.com/defl/hokku_epaper/blob/main/docs/install.md).
 
 ### Requirements
 

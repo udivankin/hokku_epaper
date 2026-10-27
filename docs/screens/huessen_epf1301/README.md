@@ -13,11 +13,10 @@ battery reporting, deep sleep, diagnostics, and the full conversion pipeline.
 | | |
 |---|---|
 | **Buy** | [Retailers, prices and what to check](../../hardware.md#hokku--huessen-133) |
-| **Install** | [Appliance image](../../appliance.md) (easiest) · [manual install](../../install.md) |
-| **Use** | [User manual](../../manual.md) |
+| **Server** | [bun-server](../../../bun-server/README.md) serves the Bigme F7 only; this frame needs the [upstream server](https://github.com/defl/hokku_epaper) |
 
 The stock firmware is replaced over USB during setup. After that first flash, all
-future firmware updates go [over the air](../../manual.md) from the web app.
+future firmware updates go over the air from the upstream server's web app.
 
 ## Documentation
 

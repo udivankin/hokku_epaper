@@ -1,5 +1,0 @@
-hokku/webserver/config/config.json.example /usr/share/hokku-server/
-hokku/webserver/templates/* /usr/share/hokku-server/templates/
-hokku/webserver/static/* /usr/share/hokku-server/static/
-firmware/release/hokku-* /usr/share/hokku-server/firmware/
-default_image/logo_alt_white.png /usr/share/hokku-server/

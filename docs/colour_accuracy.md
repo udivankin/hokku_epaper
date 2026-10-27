@@ -1,6 +1,6 @@
 # Colour accuracy
 
-The panel settings aren't copied from a spec sheet; they come from measuring real panels. This page tells the story of how the shipped tuning was reached. To measure a panel yourself, see [Measuring a panel's colour with a colorimeter](color_calibration.md).
+The panel settings aren't copied from a spec sheet; they come from measuring real panels. This page tells the story of how the shipped tuning was reached.
 
 ## Measuring the panel
 
