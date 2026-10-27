@@ -1,0 +1,152 @@
+openapi: 3.1.0
+info:
+  title: Hokku photo upload
+  version: 1.0.0
+  description: |
+    Send a photo to the Bigme F7 frame over HTTP, the same as sending it to the
+    Telegram bot. The photo is cropped and dithered for the panel straight away
+    and replaces what the frame shows at its next scheduled refresh.
+servers:
+  - url: /
+    description: The server this schema was fetched from
+security:
+  - uploadToken: []
+  - bearer: []
+paths:
+  /hokku/api/upload:
+    post:
+      operationId: uploadPhoto
+      summary: Upload a photo for the frame
+      parameters:
+        - name: X-From
+          in: header
+          required: false
+          description: Who sent the photo, shown by the bot's /status. Overridden by the multipart `from` field. Defaults to `api`.
+          schema:
+            type: string
+            maxLength: 64
+        - name: Accept
+          in: header
+          required: false
+          description: Send `image/png` to get the dithered preview back instead of JSON.
+          schema:
+            type: string
+            enum: [application/json, image/png]
+      requestBody:
+        required: true
+        description: |
+          The image, at most 25 MB. Any format sharp can decode (JPEG, PNG, WebP,
+          AVIF, GIF, TIFF), plus formats `Bun.Image` can decode on the host (such as HEIC).
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The image.
+                from:
+                  type: string
+                  maxLength: 64
+                  description: Who sent the photo.
+            encoding:
+              file:
+                contentType: image/*
+          image/*:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: Rendered; the frame shows it at its next refresh.
+          headers:
+            X-Orientation:
+              description: "Only with `Accept: image/png`."
+              schema:
+                $ref: "#/components/schemas/Orientation"
+            X-Next-Refresh:
+              description: "Only with `Accept: image/png`."
+              schema:
+                type: string
+                format: date-time
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResult"
+            image/png:
+              schema:
+                type: string
+                format: binary
+                description: The dithered preview, upright, 800×480 (landscape) or 480×800 (portrait).
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          description: Uploads are disabled because the server has no `UPLOAD_TOKEN`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/Error"
+        "422":
+          description: The image could not be decoded. The frame keeps its current photo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    uploadToken:
+      type: apiKey
+      in: header
+      name: X-Upload-Token
+      description: The server's `UPLOAD_TOKEN`. Use this behind a proxy that takes `Authorization` for its own basic auth.
+    bearer:
+      type: http
+      scheme: bearer
+      description: The server's `UPLOAD_TOKEN` as a bearer token.
+  schemas:
+    Orientation:
+      type: string
+      enum: [landscape, portrait]
+      description: Taken from the photo's own shape; square photos use the server's `SQUARE_ORIENTATION`.
+    UploadResult:
+      type: object
+      required: [ok, orientation, received_at, next_refresh, preview]
+      properties:
+        ok:
+          const: true
+        orientation:
+          $ref: "#/components/schemas/Orientation"
+        received_at:
+          type: string
+          format: date-time
+        next_refresh:
+          type: string
+          format: date-time
+          description: The next refresh slot, when the frame picks the photo up.
+        preview:
+          type: string
+          description: Path of the dithered preview PNG.
+          example: /hokku/preview.png
+    Error:
+      type: object
+      required: [ok, error]
+      properties:
+        ok:
+          const: false
+        error:
+          type: string
+  responses:
+    Error:
+      description: |
+        400 the body is empty or the multipart has no `file`; 401 missing or wrong
+        token; 413 the image is over 25 MB.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
